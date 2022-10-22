@@ -1,0 +1,330 @@
+import logging
+import os
+from typing import Optional, Tuple
+
+import hydra
+import torch
+from hydra.utils import instantiate
+from omegaconf import DictConfig, OmegaConf
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+
+from uace.dataset import NoisyCIFAR10, NoisyCIFAR100, NoisyMNIST,NoisyFASHIONMNIST, Clothing1MDataset,split_dataset
+from uace.evaluator import Evaluator
+from uace.scheduler import ExponentialDecayLR
+from uace.trainer import Trainer
+from uace.transform import cifar10_transform, cifar100_transform, mnist_transform,clothing1m_transform
+from uace.utils import flatten, to_clean_str
+
+
+def train(cfg: DictConfig) -> None:
+    """Trains model from config
+
+    Args:
+        cfg: Hydra config
+
+    """
+    dataset_name = cfg.dataset.name
+
+    # Logger
+    logger = logging.getLogger()
+
+    # Device
+    device = get_device(cfg)
+
+    # Data
+    train_loader, val_loader, test_loader = get_loaders(cfg)
+    val_loader = test_loader
+    #print("-------",val_loader)
+
+    # Model
+    # Use Hydra's instantiation to initialize directly from the config file
+    model: torch.nn.Module = instantiate(cfg.model).to(device)
+
+    #print("model",cfg.mode)
+    loss_fn: torch.nn.Module = instantiate(cfg.loss).to(device)
+    optimizer: torch.optim.Optimizer = instantiate(
+        cfg.hparams.optimizer, model.parameters()
+    )
+    scheduler = instantiate(cfg.hparams.scheduler, optimizer)
+    update_sched_on_iter = True if isinstance(scheduler, ExponentialDecayLR) else False
+
+    # Paths
+    save_path = os.getcwd() if cfg.save else None
+    checkpoint_path = (
+        hydra.utils.to_absolute_path(cfg.checkpoint)
+        if cfg.checkpoint is not None
+        else None
+    )
+
+    #print("----------------------",save_path,checkpoint_path)
+
+    # Tensorboard
+    if cfg.tensorboard:
+        # Note: global step is in epochs here
+        writer = SummaryWriter(os.getcwd())
+        # Indicate to TensorBoard that the text is pre-formatted
+        text = f"<pre>{OmegaConf.to_yaml(cfg)}</pre>"
+        writer.add_text("config", text)
+    else:
+        writer = None
+
+    # Trainer init
+    trainer = Trainer(
+        dataset_name = dataset_name,
+        model=model,
+        loss_fn=loss_fn,
+        optimizer=optimizer,
+        epochs=cfg.hparams.epochs,
+        device=device,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        scheduler=scheduler,
+        update_sched_on_iter=update_sched_on_iter,
+        grad_clip_max_norm=cfg.hparams.grad_clip_max_norm,
+        writer=writer,
+        save_path=save_path,
+        checkpoint_path=checkpoint_path,
+        mixed_precision=cfg.mixed_precision,
+    )
+
+    # Launch training process
+    trainer.train()
+
+    if test_loader is not None:
+        logger.info("\nEvaluating on test data")
+        evaluator = Evaluator(dataset_name = dataset_name,
+                              model=model, 
+                              device=device, 
+                              loader=test_loader, 
+                              save_path=save_path,
+                              checkpoint_path=checkpoint_path
+        )
+        accuracy = evaluator.evaluate()
+        #print("-------------------")
+
+        if writer:
+            writer.add_scalar("Eval/Accuracy/test", accuracy, -1)
+
+        if cfg.tensorboard:
+            res_path = hydra.utils.to_absolute_path(f"results/{cfg.dataset.name}/")
+            params = flatten(OmegaConf.to_container(cfg, resolve=True))
+            with SummaryWriter(res_path) as w:
+                w.add_hparams(params, {"accuracy": accuracy})
+
+
+def evaluate(cfg: DictConfig) -> None:
+    """Evaluates model from config
+
+    Args:
+        cfg: Hydra config
+    """
+    # dataset name 
+    dataset_name = cfg.dataset.name
+
+    # Logger
+    logger = logging.getLogger()
+
+    # Device
+    device = get_device(cfg)
+
+    # Data
+    train_loader, val_loader, test_loader = get_loaders(cfg)
+
+    # Model
+    model: torch.nn.Module = instantiate(cfg.model).to(device)
+    
+    if cfg.checkpoint != None:
+        save_path = os.getcwd()
+    else:
+        save_path = os.getcwd() if cfg.save else None
+
+    checkpoint_path = hydra.utils.to_absolute_path(cfg.checkpoint)
+
+    print("++++++++++++++++",checkpoint_path)
+
+    if train_loader is not None:
+        logger.info("Evaluating on training data")
+        evaluator = Evaluator(
+            dataset_name = dataset_name,
+            model=model,
+            device=device,
+            loader=train_loader,
+            save_path=save_path,
+            checkpoint_path=checkpoint_path,
+        )
+        evaluator.evaluate()
+        # Remove checkpoint loading for other loaders
+        checkpoint_path = None
+
+    if val_loader is not None:
+        logger.info("Evaluating on validation data")
+        evaluator = Evaluator(
+            dataset_name = dataset_name,
+            model=model,
+            device=device,
+            loader=val_loader,
+            save_path=save_path,
+            checkpoint_path=checkpoint_path,
+        )
+        evaluator.evaluate()
+        # Remove checkpoint loading for other loaders
+        checkpoint_path = None
+
+    if test_loader is not None:
+        logger.info("Evaluating on test data")
+        evaluator = Evaluator(
+            dataset_name = dataset_name,
+            model=model,
+            device=device,
+            loader=test_loader,
+            save_path=save_path,
+            checkpoint_path=checkpoint_path,
+        )
+        evaluator.evaluate()
+
+
+def get_device(cfg: DictConfig) -> torch.device:
+    """Initializes the device from config
+
+    Args:
+        cfg: Hydra config
+
+    Returns:
+        device on which the model will be trained or evaluated
+
+    """
+    if cfg.auto_cpu_if_no_gpu:
+        device = (
+            torch.device(cfg.device)
+            if torch.cuda.is_available()
+            else torch.device("cpu")
+        )
+    else:
+        device = torch.device(cfg.device)
+
+    return device
+
+
+def get_loaders(
+    cfg: DictConfig,
+) -> Tuple[Optional[DataLoader], Optional[DataLoader], Optional[DataLoader]]:
+    """Initializes the training, validation, test data & loaders from config
+
+    Args:
+        cfg: Hydra config
+
+    Returns:
+        Tuple containing the train dataloader, validation dataloader and test dataloader
+    """
+
+    name = to_clean_str(cfg.dataset.name)
+
+    if name == "mnist":
+        train_transform = mnist_transform()
+        test_transform = mnist_transform()
+        dataset = NoisyMNIST
+    elif name == "fashionmnist":
+        train_transform = mnist_transform()
+        test_transform = mnist_transform()
+        dataset = NoisyFASHIONMNIST
+
+
+    elif name == "cifar10":
+        train_transform = cifar10_transform(augment=cfg.dataset.train.augment)
+        test_transform = cifar10_transform(augment=False)
+        dataset = NoisyCIFAR10
+
+    elif name == "cifar100":
+        train_transform = cifar100_transform(augment=cfg.dataset.train.augment)
+        test_transform = cifar100_transform(augment=False)
+        dataset = NoisyCIFAR100
+    elif name == "clothing1m":
+        train_transform = clothing1m_transform(augment=cfg.dataset.train.augment)
+        test_transform = clothing1m_transform(augment=False)
+        dataset = Clothing1MDataset
+
+    else:
+        raise ValueError(f"Invalid dataset: {name}")
+
+    root = hydra.utils.to_absolute_path(cfg.dataset.root)
+
+    # Train
+    if cfg.dataset.train.use:
+        train_set = dataset(
+            root,
+            train=True,
+            transform=train_transform,
+            download=cfg.dataset.download,
+            corrupt_prob=cfg.dataset.train.corrupt_prob,
+            asym = cfg.dataset.train.asym,
+            noise_seed=cfg.dataset.train.noise_seed,
+        )
+        if cfg.dataset.val.use and cfg.dataset.val.split is not None:
+            train_set, _ = split_dataset(
+                dataset=train_set,
+                split=cfg.dataset.val.split,
+                seed=cfg.dataset.val.seed,
+            )
+
+        train_loader = DataLoader(
+            train_set,
+            batch_size=cfg.hparams.batch_size,
+            shuffle=True,
+            num_workers=cfg.dataset.num_workers,
+        )
+    else:
+        train_loader = None
+
+    # Validation
+    if cfg.dataset.val.use:
+        if cfg.dataset.val.split is not None and cfg.dataset.val.split != 0.0:
+            val_set = dataset(
+                root,
+                train=True,
+                transform=test_transform,
+                download=cfg.dataset.download,
+                corrupt_prob=cfg.dataset.train.corrupt_prob,
+                asym = cfg.dataset.train.asym,
+                noise_seed=cfg.dataset.train.noise_seed,
+            )
+            _, val_set = split_dataset(
+                dataset=val_set,
+                split=cfg.dataset.val.split,
+                seed=cfg.dataset.val.seed,
+            )
+            val_loader = DataLoader(
+                val_set,
+                batch_size=cfg.hparams.batch_size,
+                shuffle=False,
+                num_workers=cfg.dataset.num_workers,
+            )
+
+        else:
+            logger = logging.getLogger()
+            logger.info("No validation set will be used, as no split value was given.")
+            val_loader = None
+    else:
+        val_loader = None
+
+    # Test
+    if cfg.dataset.test.use:
+        test_set = dataset(
+            root,
+            train=False,
+            transform=test_transform,
+            download=cfg.dataset.download,
+            corrupt_prob=0,
+        )
+        test_loader = DataLoader(
+            test_set,
+            batch_size=cfg.hparams.batch_size,
+            shuffle=False,
+            num_workers=cfg.dataset.num_workers,
+        )
+    else:
+        test_loader = None
+
+
+
+    return train_loader, val_loader, test_loader

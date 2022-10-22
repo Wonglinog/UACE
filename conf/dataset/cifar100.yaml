@@ -1,0 +1,16 @@
+name: cifar100
+root: data/
+download: true # download if not already downloaded
+num_workers: 6
+
+train:
+  augment: true
+  corrupt_prob: 0.05
+  asym: False
+  noise_seed: 0
+
+val:
+  split: null # to activate split, use value in the range [0, 1]
+  seed: 123
+
+test:

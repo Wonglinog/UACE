@@ -1,0 +1,5 @@
+_target_: uace.loss.NegCE
+alpha: 10
+beta: 4
+gamma: 1
+lamb: 1

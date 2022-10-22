@@ -1,0 +1,4 @@
+_target_: uace.loss.SCELoss
+num_classes: 10
+alpha: 0.01
+beta: 1

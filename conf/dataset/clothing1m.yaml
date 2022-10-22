@@ -1,0 +1,16 @@
+name: clothing1m
+root: /157Dataset/data-wang.lin/processed_data/CVPR/Clothing_1M/
+download: true # download if not already downloaded
+num_workers: 4
+
+train:
+  augment: true
+  corrupt_prob: 0
+  asym: False
+  noise_seed: 0
+
+val:
+  split: null # to activate split, use value in the range [0, 1]
+  seed: 1234
+
+test:

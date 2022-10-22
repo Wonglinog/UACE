@@ -1,0 +1,4 @@
+_target_: uace.loss.NCEandMAE
+num_classes: 10
+alpha: 1.0
+beta: 1.0

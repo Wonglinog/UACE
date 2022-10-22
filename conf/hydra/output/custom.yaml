@@ -1,0 +1,9 @@
+# @package hydra
+run:
+  dir: outputs/run/${hydra.job.name}/${dataset.name}_${model._target_}/asym_${dataset.train.asym}/noise_rate_${dataset.train.corrupt_prob}/${loss._target_}_noise_seed_${dataset.train.noise_seed}_${now:%Y-%m-%d_%H-%M-%S}
+sweep:
+  dir: outputs/multirun/${hydra.job.name}/${dataset.name}_${model._target_}/asym_${dataset.train.asym}/noise_rate_${dataset.train.corrupt_prob}/${loss._target_}_noise_seed_${dataset.train.noise_seed}_${now:%Y-%m-%d_%H-%M-%S}
+  subdir: ${hydra.job.num} #_${hydra.job.override_dirname}
+
+#  dir: outputs/multirun/${hydra.job.name}/${dataset.name}/${now:%Y-%m-%d_%H-%M-%S}
+#  subdir: ${hydra.job.num}_${hydra.job.override_dirname}

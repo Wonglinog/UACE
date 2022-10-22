@@ -1,0 +1,8 @@
+defaults:
+  - dataset: mnist
+  - model: lenet
+  - loss: phuber_ce
+  - hparams: ${dataset}_${model}
+  - misc: eval_misc
+  - override hydra/job_logging: custom
+  - override hydra/output: custom

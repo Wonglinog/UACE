@@ -1,0 +1,9 @@
+defaults:
+  - dataset: mnist
+  - model: lenet
+  - loss: phuber_ce
+  - hparams: ${dataset}_${model}
+    # Note: hyper-parameters are automatically set when specifying dataset and model
+  - misc: train_misc
+  - override hydra/job_logging: custom
+  - override hydra/output: custom
