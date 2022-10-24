@@ -22,7 +22,7 @@ HYDRA_FULL_ERROR=1 CUDA_VISIBLE_DEVICES=0 python3 train.py --multirun dataset=mn
 #### Accuracy Analysis
 ![Figure3](doc/Figure3.png)
 #### Gradient Magnitude Analysis
-![Figure4](doc/Figure3.png)
+![Figure4](doc/Figure4.png)
 
 ### Parametric Analysis
 ![Figure5](doc/Figure5.png)
