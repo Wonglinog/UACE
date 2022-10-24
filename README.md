@@ -13,8 +13,6 @@ HYDRA_FULL_ERROR=1 CUDA_VISIBLE_DEVICES=0 python3 train.py --multirun dataset=mn
 ### UWT 
 ![Figure2](doc/Figure2.png)
 
-## Methods
-
 ## Experiments
 
 ### Results (paired t-test at 0.05 significance level)
