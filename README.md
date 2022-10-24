@@ -15,7 +15,7 @@ HYDRA_FULL_ERROR=1 CUDA_VISIBLE_DEVICES=0 python3 train.py --multirun dataset=mn
 ## Experiments
 
 ### Results (paired t-test at 0.05 significance level)
-![Tabel1](doc/table1.png)
+doc/Table1.png
 ### Representations
 
 ### Ablation Study 
