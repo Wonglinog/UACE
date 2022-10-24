@@ -10,15 +10,26 @@ HYDRA_FULL_ERROR=1 CUDA_VISIBLE_DEVICES=0 python3 train.py --multirun dataset=mn
 
 ## Motivation
 
+### UWT 
+![Figure2](doc/Figure2.png)
+
 ## Methods
 
 ## Experiments
 
 ### Results (paired t-test at 0.05 significance level)
 ![Tabel](doc/Table1.png)
-### Representations
-![Figure7](doc/Figure7.png)
+
 ### Ablation Study 
+#### Accuracy Analysis
+![Figure3](doc/Figure3.png)
+#### Gradient Magnitude Analysis
+![Figure4](doc/Figure3.png)
 
 ### Parametric Analysis
+![Figure5](doc/Figure5.png)
+![Figure6](doc/Figure6.png)
 
+
+### Representations
+![Figure7](doc/Figure7.png)
